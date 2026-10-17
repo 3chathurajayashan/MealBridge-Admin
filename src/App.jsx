@@ -8,6 +8,7 @@ import UserProfile from "./Components/AdminComponent/AdComponents/UserProfile";
 import AllDelivers from "./Components/DeliverManagement/AllDelivers";
 import AssignDelivery from "./Components/DeliverManagement/AssignDelivery";
 import Receipients from "./Components/RecipientCmponent/Receipients";
+import Complaint from "./Components/ComplaintComponent/Complaint";
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
       <Route path="/admin/donations" element={<AllDelivers />}></Route>
       <Route path="/admin/delivers" element={<AssignDelivery />}></Route>
       <Route path="/admin/requests" element={<Receipients />}></Route>
+      <Route path="/admin/complaints" element={<Complaint />}></Route>
     </Routes>
   );
 }

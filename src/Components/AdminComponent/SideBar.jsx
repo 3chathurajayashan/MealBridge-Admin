@@ -62,7 +62,12 @@ const navItems = [
   },
   { name: "Request Assigns", href: "#assigns", icon: ClipboardList },
   { name: "Feedbacks", href: "#feedbacks", icon: Star, badge: 12 },
-  { name: "Complaints", href: "#complaints", icon: AlertTriangle, badge: 2 },
+  {
+    name: "Complaints",
+    href: "/admin/complaints",
+    icon: AlertTriangle,
+    badge: 2,
+  },
   {
     name: "Team Conversations",
     href: "#conversations",
