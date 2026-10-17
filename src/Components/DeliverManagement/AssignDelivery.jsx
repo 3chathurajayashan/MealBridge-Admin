@@ -1,4 +1,14 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { motion } from "framer-motion";
+import { MapPin, Navigation, Package, Phone, Search } from "lucide-react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 /* ───────────────────────── API ───────────────────────── */
 
@@ -285,6 +295,736 @@ function SkeletonCard() {
   );
 }
 
+/* ───────────────────────── Map component (Leaflet) ───────────────────────── */
+/* ───────────── Location helpers ─────────────
+   Accepts {latitude, longitude}, {lat, lng}, or GeoJSON {coordinates:[lng,lat]} */
+
+const toPoint = (loc) => {
+  if (!loc || typeof loc !== "object") return null;
+
+  let lat = loc.latitude ?? loc.lat;
+  let lng = loc.longitude ?? loc.lng ?? loc.lon;
+
+  if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
+    [lng, lat] = loc.coordinates;
+  }
+
+  if (lat == null || lng == null) return null;
+
+  lat = Number(lat);
+  lng = Number(lng);
+
+  if (
+    Number.isNaN(lat) ||
+    Number.isNaN(lng) ||
+    Math.abs(lat) > 90 ||
+    Math.abs(lng) > 180 ||
+    (lat === 0 && lng === 0)
+  ) {
+    return null;
+  }
+
+  return [lat, lng];
+};
+
+/* A user may keep coordinates under location, currentLocation, or at the top level. */
+const userPoint = (user) =>
+  toPoint(user?.location) || toPoint(user?.currentLocation) || toPoint(user);
+
+const userName = (user) =>
+  user?.fullName ||
+  [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+  "Volunteer";
+
+/* ───────────── Styling ───────────── */
+
+const COLORS = {
+  pickup: "#ff9f0a",
+  dropoff: "#0a84ff",
+  volunteer: "#30d158",
+  candidate: "#86868b",
+  selected: "#0071e3",
+};
+
+const FONT =
+  "-apple-system,BlinkMacSystemFont,'SF Pro Text',Helvetica,Arial,sans-serif";
+
+// Marker text is placed into HTML, so keep letters/numbers only.
+const safeLabel = (text) =>
+  String(text ?? "")
+    .replace(/[^\p{L}\p{N}]/gu, "")
+    .slice(0, 2);
+
+const pin = (color, text, size = 32, pulse = false) =>
+  L.divIcon({
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
+    html: `<div style="
+      width:${size}px;height:${size}px;border-radius:50%;
+      background:${color};color:#fff;border:3px solid #fff;
+      display:flex;align-items:center;justify-content:center;
+      font:600 ${size > 30 ? 13 : 12}px ${FONT};
+      box-shadow:0 4px 12px rgba(0,0,0,.28)${
+        pulse ? `,0 0 0 6px ${color}33` : ""
+      };">${safeLabel(text)}</div>`,
+  });
+
+const popupNode = (title, subtitle) => {
+  const wrap = document.createElement("div");
+  wrap.style.cssText = `font-family:${FONT};min-width:120px`;
+  const t = document.createElement("div");
+  t.textContent = title;
+  t.style.cssText = "font-weight:600;font-size:13px;color:#1d1d1f";
+  wrap.appendChild(t);
+  if (subtitle) {
+    const s = document.createElement("div");
+    s.textContent = subtitle;
+    s.style.cssText = "font-size:12px;color:#6e6e73;margin-top:2px";
+    wrap.appendChild(s);
+  }
+  return wrap;
+};
+
+const LEGEND = [
+  { key: "pickup", label: "Pickup", color: COLORS.pickup },
+  { key: "dropoff", label: "Drop-off", color: COLORS.dropoff },
+  { key: "volunteer", label: "Volunteer", color: COLORS.volunteer },
+];
+
+const TILES = {
+  street: {
+    // Free, no API key. (CARTO now stamps "API KEY REQUIRED" on keyless tiles.)
+    url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    options: {
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    },
+  },
+  satellite: {
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    options: {
+      maxZoom: 19,
+      attribution: "Tiles &copy; Esri, Maxar, Earthstar Geographics",
+    },
+  },
+};
+
+const fitPoints = (map, pts) => {
+  if (!map || !pts?.length) return;
+  if (pts.length === 1) {
+    map.setView(pts[0], 15);
+  } else {
+    map.fitBounds(L.latLngBounds(pts), {
+      padding: [56, 56],
+      maxZoom: 16,
+      animate: true,
+    });
+  }
+};
+
+/* ───────────── Component ───────────── */
+
+function DeliveryMap({
+  pickup, // location object
+  dropoff, // location object
+  volunteer, // assigned volunteer (user object)
+  candidates = [], // volunteers; optional markerColor, markerLabel, subtitle
+  selectedId, // highlighted candidate _id
+  onSelectCandidate, // (id) => void, fired when a marker is clicked
+  height = 300,
+  fill = false, // true: fill a positioned parent instead of using `height`
+  legend = true,
+  candidateLabel = "Nearby volunteers",
+  satellite = false,
+  recenterKey = 0, // change this number to re-fit the view
+  focusSelected = false, // zoom to selected candidate + its pickup/drop-off
+}) {
+  const elRef = useRef(null);
+  const mapRef = useRef(null);
+  const layerRef = useRef(null);
+  const tileRef = useRef(null);
+  const boundsRef = useRef([]);
+  const fitKeyRef = useRef("");
+  const onSelectRef = useRef(onSelectCandidate);
+  onSelectRef.current = onSelectCandidate;
+
+  const pickupPt = toPoint(pickup);
+  const dropoffPt = toPoint(dropoff);
+  const volunteerPt = volunteer ? userPoint(volunteer) : null;
+
+  const candidatePts = (candidates || [])
+    .map((c) => ({ person: c, pt: userPoint(c) }))
+    .filter((c) => c.pt);
+
+  const hasAnything =
+    pickupPt || dropoffPt || volunteerPt || candidatePts.length > 0;
+
+  // "position" key decides when to refit; "style" key decides when to redraw.
+  const positionKey = JSON.stringify([
+    pickupPt,
+    dropoffPt,
+    volunteerPt,
+    candidatePts.map((c) => [c.person._id, c.pt]),
+  ]);
+  const styleKey = JSON.stringify([
+    positionKey,
+    selectedId || "",
+    candidatePts.map((c) => [c.person.markerColor, c.person.markerLabel]),
+  ]);
+
+  /* Create the map once */
+  useEffect(() => {
+    const map = L.map(elRef.current, {
+      zoomControl: false,
+      scrollWheelZoom: false, // avoid hijacking page scroll
+    }).setView([7.8731, 80.7718], 7);
+
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+    layerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+
+    // Keep the map correct while its container animates open or resizes.
+    const ro = new ResizeObserver(() => map.invalidateSize());
+    ro.observe(elRef.current);
+
+    return () => {
+      ro.disconnect();
+      map.remove();
+      mapRef.current = null;
+      layerRef.current = null;
+      tileRef.current = null;
+    };
+  }, []);
+
+  /* Street / satellite tiles */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (tileRef.current) map.removeLayer(tileRef.current);
+    const t = TILES[satellite ? "satellite" : "street"];
+    tileRef.current = L.tileLayer(t.url, t.options).addTo(map);
+    tileRef.current.bringToBack();
+  }, [satellite]);
+
+  /* Draw markers + route lines */
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = layerRef.current;
+    if (!map || !layer) return;
+
+    layer.clearLayers();
+    const all = [];
+    let selectedPt = null;
+
+    if (pickupPt) {
+      L.marker(pickupPt, { icon: pin(COLORS.pickup, "P"), zIndexOffset: 400 })
+        .bindPopup(popupNode("Pickup", "Donor location"))
+        .addTo(layer);
+      all.push(pickupPt);
+    }
+
+    if (dropoffPt) {
+      L.marker(dropoffPt, { icon: pin(COLORS.dropoff, "D"), zIndexOffset: 400 })
+        .bindPopup(popupNode("Drop-off", "Recipient location"))
+        .addTo(layer);
+      all.push(dropoffPt);
+    }
+
+    if (pickupPt && dropoffPt) {
+      L.polyline([pickupPt, dropoffPt], {
+        color: "#1d1d1f",
+        weight: 2,
+        opacity: 0.35,
+        dashArray: "6 8",
+      }).addTo(layer);
+    }
+
+    if (volunteerPt) {
+      L.marker(volunteerPt, {
+        icon: pin(COLORS.volunteer, "V", 36, true),
+        zIndexOffset: 800,
+      })
+        .bindPopup(popupNode(userName(volunteer), "Assigned volunteer"))
+        .addTo(layer);
+      all.push(volunteerPt);
+
+      if (pickupPt) {
+        L.polyline([volunteerPt, pickupPt], {
+          color: COLORS.volunteer,
+          weight: 3,
+          opacity: 0.8,
+        }).addTo(layer);
+      }
+    }
+
+    candidatePts.forEach(({ person, pt }, i) => {
+      const isSelected = !!selectedId && person._id === selectedId;
+      const label = person.markerLabel ?? person.recommendedRank ?? i + 1;
+      const color =
+        person.markerColor || (isSelected ? COLORS.selected : COLORS.candidate);
+      const sub =
+        person.subtitle ??
+        (person.pickupDistanceKm != null
+          ? `${person.pickupDistanceKm} km from pickup`
+          : "");
+
+      const marker = L.marker(pt, {
+        icon: isSelected ? pin(color, label, 38, true) : pin(color, label, 30),
+        zIndexOffset: isSelected ? 1000 : 200,
+      })
+        .bindPopup(popupNode(userName(person), sub))
+        .addTo(layer);
+
+      if (onSelectRef.current) {
+        marker.on("click", () => onSelectRef.current?.(person._id));
+      }
+
+      all.push(pt);
+
+      if (isSelected) {
+        selectedPt = pt;
+        if (pickupPt) {
+          L.polyline([pt, pickupPt], { color, weight: 3, opacity: 0.85 }).addTo(
+            layer,
+          );
+        }
+      }
+    });
+
+    const focus =
+      focusSelected && selectedPt
+        ? [selectedPt, pickupPt, dropoffPt].filter(Boolean)
+        : all;
+
+    boundsRef.current = focus;
+
+    // Refit only when the data/selection that matters actually changed.
+    const fitKey = focusSelected ? styleKey : positionKey;
+    if (fitKeyRef.current !== fitKey && focus.length) {
+      fitKeyRef.current = fitKey;
+      fitPoints(map, focus);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [styleKey]);
+
+  /* Manual recenter */
+  useEffect(() => {
+    if (recenterKey) fitPoints(mapRef.current, boundsRef.current);
+  }, [recenterKey]);
+
+  const showCandidates = candidatePts.length > 0;
+
+  return (
+    <div
+      className={
+        fill
+          ? "absolute inset-0 overflow-hidden"
+          : "relative overflow-hidden rounded-2xl bg-[#f5f5f7] shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)]"
+      }
+    >
+      <div
+        ref={elRef}
+        className="isolate"
+        style={{ height: fill ? "100%" : height, width: "100%" }}
+        role="region"
+        aria-label="Map of delivery locations"
+      />
+
+      {legend && hasAnything && (
+        <div
+          className="pointer-events-none absolute left-3 top-3 z-[500] flex flex-wrap items-center gap-x-3 gap-y-1 rounded-full px-3 py-1.5 text-[12px] font-medium text-[#1d1d1f]"
+          style={{
+            background: "rgba(255,255,255,.82)",
+            WebkitBackdropFilter: "saturate(180%) blur(12px)",
+            backdropFilter: "saturate(180%) blur(12px)",
+            boxShadow: "0 2px 10px rgba(0,0,0,.12)",
+          }}
+        >
+          {LEGEND.filter((l) =>
+            l.key === "volunteer" ? volunteerPt : true,
+          ).map((l) => (
+            <span key={l.key} className="inline-flex items-center gap-1.5">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ background: l.color }}
+              />
+              {l.label}
+            </span>
+          ))}
+          {showCandidates && (
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="h-2 w-2 rounded-full"
+                style={{ background: COLORS.candidate }}
+              />
+              {candidateLabel}
+            </span>
+          )}
+        </div>
+      )}
+
+      {!hasAnything && (
+        <div className="absolute inset-0 z-[500] flex flex-col items-center justify-center bg-[#f5f5f7] px-6 text-center">
+          <p className="text-[15px] font-semibold text-[#1d1d1f]">
+            Map unavailable
+          </p>
+          <p className="mt-1 max-w-xs text-[13px] leading-5 text-[#6e6e73]">
+            No valid coordinates were found for this view.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ───────────────────────── Fleet tracking section ───────────────────────── */
+/* Only volunteers with one of these delivery statuses are "on the road". */
+const STATUS_META = {
+  ACCEPTED: { label: "Heading to pickup", color: "#0a84ff" },
+  PICKED_UP: { label: "Food picked up", color: "#bf5af2" },
+  IN_TRANSIT: { label: "In transit", color: "#5e5ce6" },
+};
+const ACTIVE = Object.keys(STATUS_META);
+
+const getInitials = (name) =>
+  name
+    .split(" ")
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+function DeliveryPersonsMapSection({ deliveries = [], loading = false }) {
+  const [selectedId, setSelectedId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [satellite, setSatellite] = useState(false);
+  const [recenterKey, setRecenterKey] = useState(0);
+
+  /* Real volunteers, taken from deliveries that already have one assigned. */
+  const persons = useMemo(
+    () =>
+      deliveries
+        .filter(
+          (d) =>
+            d.volunteer &&
+            typeof d.volunteer === "object" &&
+            ACTIVE.includes(d.status),
+        )
+        .map((d) => {
+          const volunteer = d.volunteer;
+          const donation = d.donation || {};
+          const recipient = d.recipient || {};
+          const name = getName(volunteer);
+
+          return {
+            id: volunteer._id || d._id,
+            name,
+            phone: volunteer.phoneNumber,
+            status: d.status,
+            meta: STATUS_META[d.status],
+            volunteer,
+            foodName: donation.foodName || "Food donation",
+            pickupAddress:
+              d.pickupAddress ||
+              donation.pickupAddress ||
+              "Address unavailable",
+            dropoffAddress:
+              d.deliveryAddress || recipient.address || "Address unavailable",
+            pickup: d.pickupLocation || donation.pickupLocation,
+            dropoff: d.deliveryLocation || recipient.location,
+          };
+        }),
+    [deliveries],
+  );
+
+  const filtered = persons.filter((p) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.pickupAddress.toLowerCase().includes(q) ||
+      p.dropoffAddress.toLowerCase().includes(q) ||
+      p.foodName.toLowerCase().includes(q)
+    );
+  });
+
+  const selected =
+    persons.find((p) => p.id === selectedId) ||
+    filtered[0] ||
+    persons[0] ||
+    null;
+
+  /* Every volunteer becomes a coloured pin; the selected one is highlighted. */
+  const mapCandidates = useMemo(
+    () =>
+      filtered.map((p) => ({
+        ...p.volunteer,
+        _id: p.id,
+        fullName: p.name,
+        markerColor: p.meta.color,
+        markerLabel: getInitials(p.name),
+        subtitle: p.meta.label,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [persons, searchQuery],
+  );
+
+  /* ───── Loading / empty states ───── */
+
+  if (loading && persons.length === 0) {
+    return (
+      <section className="mt-14">
+        <div className="mb-skeleton h-[420px] rounded-[28px]" />
+      </section>
+    );
+  }
+
+  return (
+    <section className="mt-14">
+      {/* Header */}
+      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+        <div>
+          <h2 className="text-[28px] font-semibold tracking-[-0.025em] text-[#1d1d1f] sm:text-[34px]">
+            Fleet tracking
+          </h2>
+          <p className="mt-1 text-[15px] text-[#6e6e73]">
+            Volunteers currently on a delivery. Positions update when you
+            refresh.
+          </p>
+        </div>
+
+        <div className="inline-flex items-center gap-2 self-start rounded-full bg-white px-3.5 py-2 text-xs font-medium text-[#1d1d1f] md:self-auto">
+          <span
+            className={`h-2 w-2 rounded-full ${
+              persons.length ? "animate-pulse bg-[#30d158]" : "bg-[#86868b]"
+            }`}
+          />
+          {persons.length} {persons.length === 1 ? "volunteer" : "volunteers"}{" "}
+          on delivery
+        </div>
+      </div>
+
+      {persons.length === 0 ? (
+        <div className="rounded-[28px] bg-white px-6 py-16 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#f5f5f7] text-[#6e6e73]">
+            <Navigation className="h-6 w-6" />
+          </div>
+          <h3 className="mt-5 text-xl font-semibold tracking-tight">
+            No volunteers on the road.
+          </h3>
+          <p className="mx-auto mt-2 max-w-md text-[15px] leading-6 text-[#6e6e73]">
+            Once a delivery is assigned and accepted, the volunteer appears here
+            with their position on the map.
+          </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 lg:h-[650px] lg:grid-cols-12">
+          {/* Volunteer list */}
+          <div className="flex max-h-[420px] flex-col rounded-[28px] bg-white p-5 lg:col-span-4 lg:h-full lg:max-h-none">
+            <div className="relative mb-4">
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#86868b]" />
+              <input
+                type="text"
+                placeholder="Search volunteer or address…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-2xl border border-[#d2d2d7]/60 bg-[#f5f5f7] py-2.5 pl-10 pr-4 text-[13px] text-[#1d1d1f] placeholder-[#86868b] transition-all focus:border-[#0071e3] focus:outline-none focus:ring-2 focus:ring-[#0071e3]/20"
+              />
+            </div>
+
+            <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+              {filtered.length === 0 && (
+                <p className="px-2 py-8 text-center text-[13px] text-[#6e6e73]">
+                  No volunteers match “{searchQuery}”.
+                </p>
+              )}
+
+              {filtered.map((person) => {
+                const isSelected = selected?.id === person.id;
+                const heading =
+                  person.status === "ACCEPTED"
+                    ? person.pickupAddress
+                    : person.dropoffAddress;
+
+                return (
+                  <motion.button
+                    type="button"
+                    key={person.id}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    onClick={() => setSelectedId(person.id)}
+                    aria-pressed={isSelected}
+                    className={`w-full rounded-2xl border p-4 text-left transition-all ${
+                      isSelected
+                        ? "border-[#0071e3]/40 bg-[#f2f8ff] shadow-[0_8px_20px_rgba(0,113,227,0.08)]"
+                        : "border-transparent bg-[#f5f5f7] hover:bg-[#ededf0]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-white"
+                        style={{ background: person.meta.color }}
+                      >
+                        {getInitials(person.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="truncate text-sm font-semibold text-[#1d1d1f]">
+                          {person.name}
+                        </h4>
+                        <span className="text-[11px] font-medium text-[#6e6e73]">
+                          {person.meta.label}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-1.5 border-t border-black/[0.05] pt-3 text-xs text-[#6e6e73]">
+                      <MapPin className="h-3.5 w-3.5 shrink-0 text-[#86868b]" />
+                      <span className="truncate">{heading}</span>
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Map */}
+          <div className="relative flex h-[520px] flex-col justify-between overflow-hidden rounded-[28px] bg-[#e8e8ed] lg:col-span-8 lg:h-full">
+            <DeliveryMap
+              fill
+              legend={false}
+              candidateLabel="Volunteers"
+              pickup={selected?.pickup}
+              dropoff={selected?.dropoff}
+              candidates={mapCandidates}
+              selectedId={selected?.id}
+              onSelectCandidate={setSelectedId}
+              focusSelected
+              satellite={satellite}
+              recenterKey={recenterKey}
+            />
+
+            {/* Top bar */}
+            <div className="pointer-events-none relative z-10 flex flex-wrap items-center justify-between gap-2 p-4">
+              <div className="pointer-events-auto flex items-center gap-2 rounded-2xl bg-white/85 px-4 py-2 text-xs font-medium text-[#1d1d1f] shadow-sm backdrop-blur-md">
+                <Navigation className="h-3.5 w-3.5 text-[#0071e3]" />
+                <span>
+                  Viewing:{" "}
+                  <strong className="text-[#0071e3]">{selected?.name}</strong>
+                </span>
+              </div>
+
+              <div className="pointer-events-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSatellite((s) => !s)}
+                  aria-pressed={satellite}
+                  className="rounded-xl bg-white/85 px-3 py-2 text-xs font-medium text-[#1d1d1f] shadow-sm backdrop-blur-md transition-all hover:bg-white"
+                >
+                  {satellite ? "Map view" : "Satellite view"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRecenterKey((k) => k + 1)}
+                  className="rounded-xl bg-[#1d1d1f] px-3 py-2 text-xs font-medium text-white shadow-sm transition-all hover:bg-black"
+                >
+                  Recenter map
+                </button>
+              </div>
+            </div>
+
+            {/* Selected volunteer card */}
+            {selected && (
+              <div className="pointer-events-none relative z-10 px-4 pb-2">
+                <motion.div
+                  key={selected.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4, ease: [0.32, 0.72, 0, 1] }}
+                  className="pointer-events-auto w-full max-w-xs rounded-2xl bg-white/90 p-4 shadow-[0_20px_40px_rgba(0,0,0,0.14)] backdrop-blur-xl"
+                >
+                  <div className="mb-3 flex items-center gap-3">
+                    <div
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+                      style={{ background: selected.meta.color }}
+                    >
+                      {getInitials(selected.name)}
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="truncate text-sm font-semibold text-[#1d1d1f]">
+                        {selected.name}
+                      </h4>
+                      <p className="text-xs text-[#6e6e73]">
+                        {selected.meta.label}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mb-3 space-y-2.5 rounded-xl bg-[#f5f5f7] p-3 text-xs">
+                    <div className="flex items-center gap-2 font-medium text-[#1d1d1f]">
+                      <Package className="h-3.5 w-3.5 shrink-0 text-[#86868b]" />
+                      <span className="truncate">{selected.foodName}</span>
+                    </div>
+                    <div>
+                      <p className="text-[#86868b]">Pickup</p>
+                      <p className="line-clamp-2 font-medium text-[#1d1d1f]">
+                        {selected.pickupAddress}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[#86868b]">Drop-off</p>
+                      <p className="line-clamp-2 font-medium text-[#1d1d1f]">
+                        {selected.dropoffAddress}
+                      </p>
+                    </div>
+                  </div>
+
+                  {selected.phone && (
+                    <a
+                      href={`tel:${selected.phone}`}
+                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#0071e3] py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-[#0077ed]"
+                    >
+                      <Phone className="h-3.5 w-3.5" />
+                      Call {selected.phone}
+                    </a>
+                  )}
+                </motion.div>
+              </div>
+            )}
+
+            {/* Legend */}
+            <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-t border-black/5 bg-white/75 px-5 py-3 text-xs text-[#6e6e73] backdrop-blur-md">
+              <div className="flex flex-wrap items-center gap-4">
+                {Object.values(STATUS_META).map((s) => (
+                  <span key={s.label} className="flex items-center gap-1.5">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ background: s.color }}
+                    />
+                    {s.label}
+                  </span>
+                ))}
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#ff9f0a]" />
+                  Pickup
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-[#0a84ff]" />
+                  Drop-off
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ───────────────────────── Main component ───────────────────────── */
 
 function AssignDelivery() {
@@ -472,6 +1212,12 @@ function AssignDelivery() {
             <StatTile key={stat.label} {...stat} index={i} />
           ))}
         </section>
+
+        {/* Fleet tracking map */}
+        <DeliveryPersonsMapSection
+          deliveries={allDeliveries}
+          loading={loading}
+        />
 
         {/* Alerts */}
         <div className="mt-6 space-y-3">
@@ -705,6 +1451,19 @@ function AssignDelivery() {
                       </div>
                     </div>
 
+                    {/* Map */}
+                    <div className="border-t border-[#f0f0f2] p-6 sm:p-8">
+                      <DeliveryMap
+                        pickup={
+                          delivery.pickupLocation || donation.pickupLocation
+                        }
+                        dropoff={
+                          delivery.deliveryLocation || recipient.location
+                        }
+                        volunteer={delivery.volunteer ? volunteer : null}
+                      />
+                    </div>
+
                     {/* Extra info */}
                     <div className="grid gap-5 bg-[#fbfbfd] p-6 sm:grid-cols-3 sm:p-8">
                       <Field label="Quantity requested">
@@ -767,6 +1526,20 @@ function AssignDelivery() {
                                 </div>
                               ) : volunteers[id]?.length ? (
                                 <div className="space-y-3">
+                                  {/* Candidate map */}
+                                  <DeliveryMap
+                                    pickup={
+                                      delivery.pickupLocation ||
+                                      donation.pickupLocation
+                                    }
+                                    dropoff={
+                                      delivery.deliveryLocation ||
+                                      recipient.location
+                                    }
+                                    candidates={volunteers[id]}
+                                    selectedId={selectedVolunteers[id]}
+                                  />
+
                                   {volunteers[id].map((person) => {
                                     const selected =
                                       selectedVolunteers[id] === person._id;
