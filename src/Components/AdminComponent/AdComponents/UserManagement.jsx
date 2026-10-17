@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
+import AdminApi from "../../../API/AdminApi";
 import {
   Search,
   Plus,
@@ -39,23 +40,16 @@ import {
   Package,
 } from "lucide-react";
 
-/* ------------------------------------------------------------------ */
-/* Design tokens                                                       */
-/* Ink navy sidebar, warm neutral canvas, deep teal (verified/fresh)   */
-/* + burnt terracotta (attention) as the two accents. Role colors are  */
-/* functional coding, not decoration, and repeat identically across    */
-/* the table, map pins, and avatars so the eye learns them fast.       */
-/* ------------------------------------------------------------------ */
-
 const ROLE_META = {
-  Donator: { color: "#146C5B", bg: "#E6F2EF", label: "Donator" },
-  Recipient: { color: "#B4531F", bg: "#FBEAE0", label: "Recipient" },
-  Volunteer: { color: "#4C4FA3", bg: "#ECEBF9", label: "Volunteer" },
+  Donator: { color: "#000101", bg: "#5c6764", label: "Donator" },
+  Recipient: { color: "#edeff4", bg: "#1b1613", label: "Recipient" },
+  Volunteer: { color: "#dc1919", bg: "#0d0d10", label: "Volunteer" },
   "Delivery Person": {
     color: "#2B6CB0",
     bg: "#E7F0FA",
     label: "Delivery Person",
   },
+  Admin: { color: "#1F8A57", bg: "#E7F6EE", label: "Admin" },
 };
 
 const STATUS_META = {
@@ -75,151 +69,8 @@ const STATUSES = ["Active", "Inactive", "Suspended"];
 const VERIFICATIONS = ["Verified", "Pending", "Rejected"];
 
 /* ------------------------------------------------------------------ */
-/* Mock data                                                            */
+/* Mock audit seed data                                              */
 /* ------------------------------------------------------------------ */
-
-const seedUsers = [
-  {
-    id: 1,
-    name: "Sophia Chen",
-    email: "sophia.c@example.com",
-    phone: "(415) 555-0142",
-    role: "Donator",
-    status: "Active",
-    verification: "Verified",
-    location: { lat: 37.7749, lng: -122.4194, name: "Financial District, SF" },
-    joinedDate: "2025-01-14",
-    lastActive: "2026-08-29T08:12:00",
-    metric: 34,
-    metricLabel: "meals donated",
-  },
-  {
-    id: 2,
-    name: "Marcus Vance",
-    email: "marcus.v@community.org",
-    phone: "(415) 555-0198",
-    role: "Recipient",
-    status: "Active",
-    verification: "Verified",
-    location: { lat: 37.7599, lng: -122.4148, name: "Mission District, SF" },
-    joinedDate: "2025-02-01",
-    lastActive: "2026-08-28T17:40:00",
-    metric: 12,
-    metricLabel: "pickups received",
-  },
-  {
-    id: 3,
-    name: "Elena Rostova",
-    email: "elena.r@volunteer.net",
-    phone: "(415) 555-0110",
-    role: "Volunteer",
-    status: "Inactive",
-    verification: "Pending",
-    location: { lat: 37.7692, lng: -122.4467, name: "Haight-Ashbury, SF" },
-    joinedDate: "2024-11-20",
-    lastActive: "2026-08-11T09:05:00",
-    metric: 6,
-    metricLabel: "shifts completed",
-  },
-  {
-    id: 4,
-    name: "David Kim",
-    email: "david.logistics@express.io",
-    phone: "(415) 555-0176",
-    role: "Delivery Person",
-    status: "Active",
-    verification: "Verified",
-    location: { lat: 37.7558, lng: -122.4444, name: "Noe Valley, SF" },
-    joinedDate: "2024-12-05",
-    lastActive: "2026-08-29T07:58:00",
-    metric: 214,
-    metricLabel: "deliveries",
-  },
-  {
-    id: 5,
-    name: "Priya Nair",
-    email: "priya.nair@freshfields.co",
-    phone: "(415) 555-0133",
-    role: "Donator",
-    status: "Active",
-    verification: "Pending",
-    location: { lat: 37.7935, lng: -122.3964, name: "North Beach, SF" },
-    joinedDate: "2026-06-18",
-    lastActive: "2026-08-27T14:20:00",
-    metric: 5,
-    metricLabel: "meals donated",
-  },
-  {
-    id: 6,
-    name: "James O'Connor",
-    email: "j.oconnor@mailbox.com",
-    phone: "(415) 555-0187",
-    role: "Recipient",
-    status: "Suspended",
-    verification: "Rejected",
-    location: { lat: 37.7845, lng: -122.4079, name: "Nob Hill, SF" },
-    joinedDate: "2025-09-02",
-    lastActive: "2026-07-30T11:11:00",
-    metric: 3,
-    metricLabel: "pickups received",
-  },
-  {
-    id: 7,
-    name: "Aisha Bello",
-    email: "aisha.bello@volunteer.net",
-    phone: "(415) 555-0121",
-    role: "Volunteer",
-    status: "Active",
-    verification: "Verified",
-    location: { lat: 37.7431, lng: -122.4193, name: "Bernal Heights, SF" },
-    joinedDate: "2025-04-09",
-    lastActive: "2026-08-29T06:30:00",
-    metric: 41,
-    metricLabel: "shifts completed",
-  },
-  {
-    id: 8,
-    name: "Tom Alvarez",
-    email: "tom.alvarez@express.io",
-    phone: "(415) 555-0165",
-    role: "Delivery Person",
-    status: "Inactive",
-    verification: "Pending",
-    location: { lat: 37.7275, lng: -122.4449, name: "Excelsior, SF" },
-    joinedDate: "2026-03-22",
-    lastActive: "2026-08-05T16:02:00",
-    metric: 58,
-    metricLabel: "deliveries",
-  },
-  {
-    id: 9,
-    name: "Grace Park",
-    email: "grace.park@harvesttable.com",
-    phone: "(415) 555-0154",
-    role: "Donator",
-    status: "Active",
-    verification: "Verified",
-    location: { lat: 37.7879, lng: -122.4074, name: "Union Square, SF" },
-    joinedDate: "2024-08-30",
-    lastActive: "2026-08-29T09:02:00",
-    metric: 122,
-    metricLabel: "meals donated",
-  },
-  {
-    id: 10,
-    name: "Liam Foster",
-    email: "liam.foster@gmail.com",
-    phone: "(415) 555-0190",
-    role: "Recipient",
-    status: "Active",
-    verification: "Pending",
-    location: { lat: 37.7614, lng: -122.4331, name: "Castro, SF" },
-    joinedDate: "2026-07-11",
-    lastActive: "2026-08-26T13:47:00",
-    metric: 1,
-    metricLabel: "pickups received",
-  },
-];
 
 const seedAudit = [
   {
@@ -243,20 +94,13 @@ const seedAudit = [
     target: "Tom Alvarez",
     time: "2026-08-27T10:04:00",
   },
-  {
-    id: 4,
-    actor: "You",
-    action: "added",
-    target: "Priya Nair",
-    time: "2026-06-18T12:00:00",
-  },
 ];
 
 /* ------------------------------------------------------------------ */
-/* Helpers                                                              */
+/* Helpers                                                           */
 /* ------------------------------------------------------------------ */
 
-const initials = (name) =>
+const initials = (name = "") =>
   name
     .split(" ")
     .map((p) => p[0])
@@ -302,10 +146,10 @@ const downloadCSV = (rows) => {
       u.role,
       u.status,
       u.verification,
-      u.location.name,
+      u.location?.name,
       u.joinedDate,
     ]
-      .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+      .map((v) => `"${String(v || "").replace(/"/g, '""')}"`)
       .join(","),
   );
   const csv = [header.join(","), ...lines].join("\n");
@@ -321,7 +165,7 @@ const downloadCSV = (rows) => {
 };
 
 /* ------------------------------------------------------------------ */
-/* Leaflet loader hook                                                  */
+/* Leaflet loader hook                                               */
 /* ------------------------------------------------------------------ */
 
 function useLeaflet() {
@@ -354,6 +198,7 @@ function useLeaflet() {
           clearInterval(check);
         }
       }, 150);
+      return () => clearInterval(check);
     }
   }, []);
   return ready;
@@ -382,7 +227,7 @@ function MapView({ users, height = 420, focusUser, onMarkerClick }) {
     if (!ready || !containerRef.current || mapRef.current) return;
     const L = window.L;
     const map = L.map(containerRef.current, { scrollWheelZoom: false }).setView(
-      [37.7699, -122.43],
+      [6.9271, 79.8612],
       12.3,
     );
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -401,35 +246,46 @@ function MapView({ users, height = 420, focusUser, onMarkerClick }) {
     const L = window.L;
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
+
     users.forEach((u) => {
+      if (!u.location?.lat || !u.location?.lng) return;
       const isFocus = focusUser && focusUser.id === u.id;
+      const roleColor = ROLE_META[u.role]?.color || "#2B6CB0";
+
       const marker = L.marker([u.location.lat, u.location.lng], {
-        icon: pinIcon(ROLE_META[u.role].color, isFocus),
+        icon: pinIcon(roleColor, isFocus),
       }).addTo(mapRef.current);
+
       marker.bindPopup(
         `<div style="font-family:Inter,sans-serif;min-width:160px">
            <div style="font-weight:600;font-size:13px;color:#101828;margin-bottom:2px">${u.name}</div>
-           <div style="font-size:11px;color:${ROLE_META[u.role].color};font-weight:600;margin-bottom:4px">${u.role}</div>
-           <div style="font-size:11px;color:#667085">${u.location.name}</div>
+           <div style="font-size:11px;color:${roleColor};font-weight:600;margin-bottom:4px">${u.role}</div>
+           <div style="font-size:11px;color:#667085">${u.location?.name || ""}</div>
            <div style="font-size:11px;color:#667085;margin-top:2px">${u.status} &middot; ${u.verification}</div>
          </div>`,
       );
       if (onMarkerClick) marker.on("click", () => onMarkerClick(u));
       markersRef.current.push(marker);
     });
-    if (focusUser) {
+
+    if (focusUser && focusUser.location?.lat && focusUser.location?.lng) {
       mapRef.current.setView(
         [focusUser.location.lat, focusUser.location.lng],
         14,
         { animate: true },
       );
     } else if (users.length) {
-      const bounds = L.latLngBounds(
-        users.map((u) => [u.location.lat, u.location.lng]),
+      const validUsersWithCoords = users.filter(
+        (u) => u.location?.lat && u.location?.lng,
       );
-      mapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      if (validUsersWithCoords.length > 0) {
+        const bounds = L.latLngBounds(
+          validUsersWithCoords.map((u) => [u.location.lat, u.location.lng]),
+        );
+        mapRef.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+      }
     }
-  }, [users, focusUser]);
+  }, [users, focusUser, onMarkerClick]);
 
   return (
     <div
@@ -447,26 +303,34 @@ function MapView({ users, height = 420, focusUser, onMarkerClick }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Small UI atoms                                                       */
+/* Small UI atoms                                                    */
 /* ------------------------------------------------------------------ */
 
 function Avatar({ user, size = 36 }) {
-  const meta = ROLE_META[user.role];
-  const ring = STATUS_META[user.status].dot;
+  const meta = ROLE_META[user.role] || { bg: "#E7F0FA", color: "#2B6CB0" };
+  const ring = STATUS_META[user.status]?.dot || "#98A2B3";
   return (
     <div
       className="relative flex-shrink-0"
       style={{ width: size, height: size }}
     >
       <div
-        className="w-full h-full rounded-full flex items-center justify-center font-semibold"
+        className="w-full h-full rounded-full flex items-center justify-center font-semibold overflow-hidden"
         style={{
           background: meta.bg,
           color: meta.color,
           fontSize: size * 0.36,
         }}
       >
-        {initials(user.name)}
+        {user.profileImage ? (
+          <img
+            src={user.profileImage}
+            alt={user.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          initials(user.name)
+        )}
       </div>
       <span
         className="absolute -bottom-0.5 -right-0.5 rounded-full border-2 border-white"
@@ -478,7 +342,7 @@ function Avatar({ user, size = 36 }) {
 }
 
 function RoleBadge({ role }) {
-  const m = ROLE_META[role];
+  const m = ROLE_META[role] || { bg: "#E7F0FA", color: "#2B6CB0" };
   return (
     <span
       className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
@@ -490,7 +354,11 @@ function RoleBadge({ role }) {
 }
 
 function StatusPill({ status }) {
-  const m = STATUS_META[status];
+  const m = STATUS_META[status] || {
+    color: "#667085",
+    bg: "#F1F2F4",
+    dot: "#98A2B3",
+  };
   return (
     <span
       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
@@ -506,7 +374,7 @@ function StatusPill({ status }) {
 }
 
 function VerifyBadge({ verification }) {
-  const m = VERIFY_META[verification];
+  const m = VERIFY_META[verification] || VERIFY_META.Pending;
   const Icon = m.Icon;
   return (
     <span
@@ -525,7 +393,7 @@ function Toast({ toasts }) {
       {toasts.map((t) => (
         <div
           key={t.id}
-          className="bg-[#101828] text-white text-sm px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200"
+          className="bg-[#101828] text-white text-sm px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2"
         >
           {t.type === "success" && (
             <CheckCircle2 size={15} className="text-emerald-400" />
@@ -584,11 +452,55 @@ function ConfirmDialog({
 }
 
 /* ------------------------------------------------------------------ */
-/* Main app                                                             */
+/* Mapping API to UI model                                            */
 /* ------------------------------------------------------------------ */
+const mapApiUserToUiUser = (user) => {
+  const roleMap = {
+    DONOR: "Donator",
+    RECIPIENT: "Recipient",
+    VOLUNTEER: "Volunteer",
+    DELIVERY_PERSON: "Delivery Person",
+    DELIVERY: "Delivery Person",
+    ADMIN: "Admin",
+  };
+
+  return {
+    id: user._id,
+    name: user.fullName || "Unknown User",
+    email: user.email || "",
+    phone: user.phoneNumber || "",
+    role: roleMap[user.role] || user.role || "Unknown",
+    status: user.isActive ? "Active" : "Inactive",
+    verification:
+      user.verificationStatus === "VERIFIED"
+        ? "Verified"
+        : user.verificationStatus === "REJECTED"
+          ? "Rejected"
+          : "Pending",
+    location: {
+      lat: user.location?.latitude || 6.9271,
+      lng: user.location?.longitude || 79.8612,
+      name: user.address || "Location unavailable",
+    },
+    joinedDate: user.createdAt || new Date().toISOString(),
+    lastActive: user.updatedAt || user.createdAt || new Date().toISOString(),
+    metric: 0,
+    metricLabel:
+      user.role === "DELIVERY_PERSON"
+        ? "deliveries"
+        : user.role === "VOLUNTEER"
+          ? "shifts completed"
+          : user.role === "RECIPIENT"
+            ? "pickups received"
+            : "meals donated",
+    profileImage: user.profileImage?.url || null,
+  };
+};
 
 export default function GleanOpsAdmin() {
-  const [users, setUsers] = useState(seedUsers);
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [usersError, setUsersError] = useState("");
   const [audit, setAudit] = useState(seedAudit);
   const [tab, setTab] = useState("overview"); // overview | directory | map | activity | settings
 
@@ -603,10 +515,34 @@ export default function GleanOpsAdmin() {
 
   const [selectedIds, setSelectedIds] = useState([]);
   const [drawerUser, setDrawerUser] = useState(null);
-  const [editingUser, setEditingUser] = useState(null); // null = closed, {} = add, object = edit
-  const [confirm, setConfirm] = useState(null); // {title, body, danger, onConfirm}
+  const [confirm, setConfirm] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [openMenuId, setOpenMenuId] = useState(null);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        setLoadingUsers(true);
+        setUsersError("");
+        const response = await AdminApi.get("/admin/users");
+        if (response.data.success) {
+          const mappedUsers = response.data.users.map(mapApiUserToUiUser);
+          setUsers(mappedUsers);
+        } else {
+          setUsersError("Failed to load users.");
+        }
+      } catch (error) {
+        console.error("Failed to fetch users:", error);
+        setUsersError(
+          error.response?.data?.message ||
+            "Failed to load users. Please try again.",
+        );
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+    fetchUsers();
+  }, []);
 
   const pushToast = useCallback((message, type = "success") => {
     const id = Date.now() + Math.random();
@@ -693,165 +629,183 @@ export default function GleanOpsAdmin() {
 
   /* ---------- actions ---------- */
 
-  const toggleSelect = (id) =>
-    setSelectedIds((s) =>
-      s.includes(id) ? s.filter((x) => x !== id) : [...s, id],
-    );
-
-  const toggleSelectAllOnPage = () => {
-    const pageIds = pagedUsers.map((u) => u.id);
-    const allSelected = pageIds.every((id) => selectedIds.includes(id));
-    setSelectedIds((s) =>
-      allSelected
-        ? s.filter((id) => !pageIds.includes(id))
-        : [...new Set([...s, ...pageIds])],
-    );
-  };
-
   const setUserField = (id, patch) =>
     setUsers((us) => us.map((u) => (u.id === id ? { ...u, ...patch } : u)));
-
   const requestStatusChange = (user, newStatus) => {
     setOpenMenuId(null);
-    if (
-      newStatus === "Suspended" ||
-      (user.status === "Active" && newStatus === "Inactive" && false)
-    ) {
-      setConfirm({
-        title: `Suspend ${user.name}?`,
-        body: "This immediately revokes platform access. They'll be notified by email and can appeal from their account page.",
-        danger: true,
-        confirmLabel: "Suspend account",
-        onConfirm: () => {
-          setUserField(user.id, { status: "Suspended" });
-          logAudit("suspended", user.name);
-          pushToast(`${user.name} was suspended`, "error");
-          setConfirm(null);
-        },
-      });
-    } else {
-      setUserField(user.id, { status: newStatus });
-      logAudit(newStatus === "Active" ? "activated" : "deactivated", user.name);
-      pushToast(`${user.name} is now ${newStatus.toLowerCase()}`, "success");
-    }
-  };
 
-  const requestVerify = (user, verification) => {
+    const isSuspending = newStatus === "Suspended";
+
+    if (!isSuspending && newStatus !== "Active") return;
+
+    setConfirm({
+      title: `${isSuspending ? "Suspend" : "Activate"} ${user.name}?`,
+      body: isSuspending
+        ? "This will suspend the user's account and restrict platform access."
+        : "This will reactivate the user's account and restore platform access.",
+      danger: isSuspending,
+      confirmLabel: isSuspending ? "Suspend account" : "Activate account",
+
+      onConfirm: async () => {
+        try {
+          const endpoint = isSuspending
+            ? `/admin/users/${user.id}/suspend`
+            : `/admin/users/${user.id}/activate`;
+
+          const response = await AdminApi.put(endpoint);
+          const data = response.data;
+
+          if (!data.success) {
+            pushToast(
+              data.message ||
+                `Failed to ${isSuspending ? "suspend" : "activate"} user`,
+              "error",
+            );
+            return;
+          }
+
+          // Update UI only after the backend confirms success.
+          const updatedStatus =
+            data.user?.isActive === false
+              ? "Suspended"
+              : data.user?.isActive === true
+                ? "Active"
+                : newStatus;
+
+          setUserField(user.id, {
+            status: updatedStatus,
+          });
+
+          // Record activity.
+          logAudit(isSuspending ? "suspended" : "activated", user.name);
+
+          // Notify user.
+          pushToast(
+            data.message ||
+              `${user.name} was ${isSuspending ? "suspended" : "activated"}`,
+            "success",
+          );
+
+          setConfirm(null);
+        } catch (error) {
+          console.error(
+            `${isSuspending ? "Suspend" : "Activate"} User Error:`,
+            error,
+          );
+
+          pushToast(
+            error.response?.data?.message ||
+              `Failed to ${isSuspending ? "suspend" : "activate"} user. Please try again.`,
+            "error",
+          );
+        }
+      },
+    });
+  };
+  const requestVerify = async (user, verification) => {
     setOpenMenuId(null);
-    setUserField(user.id, { verification });
-    logAudit(verification === "Verified" ? "verified" : "rejected", user.name);
-    pushToast(
-      `${user.name} marked ${verification.toLowerCase()}`,
-      verification === "Rejected" ? "error" : "success",
-    );
+
+    const verificationStatus =
+      verification === "Verified" ? "VERIFIED" : "REJECTED";
+
+    try {
+      const response = await AdminApi.put(
+        `/admin/users/${user.id}/verification`,
+        { verificationStatus },
+      );
+
+      if (!response.data.success) {
+        pushToast(
+          response.data.message || "Failed to update verification",
+          "error",
+        );
+        return;
+      }
+
+      const updatedVerification =
+        response.data.user?.verificationStatus === "VERIFIED"
+          ? "Verified"
+          : response.data.user?.verificationStatus === "REJECTED"
+            ? "Rejected"
+            : verification;
+
+      setUserField(user.id, {
+        verification: updatedVerification,
+      });
+
+      logAudit(
+        updatedVerification === "Verified" ? "verified" : "rejected",
+        user.name,
+      );
+
+      pushToast(
+        response.data.message ||
+          `${user.name} marked ${updatedVerification.toLowerCase()}`,
+        "success",
+      );
+    } catch (error) {
+      console.error("Update Verification Error:", error);
+
+      pushToast(
+        error.response?.data?.message ||
+          "Failed to update verification. Please try again.",
+        "error",
+      );
+    }
   };
 
   const requestDelete = (user) => {
     setOpenMenuId(null);
+
     setConfirm({
       title: `Delete ${user.name}?`,
-      body: "This permanently removes their profile, history, and location data. This can't be undone.",
+      body: "This permanently removes their profile from the database. This action cannot be undone.",
       danger: true,
       confirmLabel: "Delete permanently",
-      onConfirm: () => {
-        setUsers((us) => us.filter((u) => u.id !== user.id));
-        setSelectedIds((s) => s.filter((id) => id !== user.id));
-        logAudit("deleted", user.name);
-        pushToast(`${user.name} was deleted`, "error");
-        setConfirm(null);
-        if (drawerUser?.id === user.id) setDrawerUser(null);
+
+      onConfirm: async () => {
+        try {
+          const response = await AdminApi.delete(`/admin/users/${user.id}`);
+
+          if (!response.data.success) {
+            pushToast(
+              response.data.message || "Failed to delete user",
+              "error",
+            );
+            return;
+          }
+
+          // Update the UI only after backend deletion succeeds.
+          setUsers((currentUsers) =>
+            currentUsers.filter((u) => u.id !== user.id),
+          );
+
+          setSelectedIds((selected) => selected.filter((id) => id !== user.id));
+
+          logAudit("deleted", user.name);
+
+          pushToast(
+            response.data.message || `${user.name} was deleted`,
+            "success",
+          );
+
+          setConfirm(null);
+
+          if (drawerUser?.id === user.id) {
+            setDrawerUser(null);
+          }
+        } catch (error) {
+          console.error("Delete User Error:", error);
+
+          pushToast(
+            error.response?.data?.message ||
+              "Failed to delete user. Please try again.",
+            "error",
+          );
+        }
       },
     });
   };
-
-  const bulkAction = (action) => {
-    const targets = users.filter((u) => selectedIds.includes(u.id));
-    if (!targets.length) return;
-    if (action === "delete") {
-      setConfirm({
-        title: `Delete ${targets.length} user${targets.length > 1 ? "s" : ""}?`,
-        body: "This permanently removes their profiles, history, and location data. This can't be undone.",
-        danger: true,
-        confirmLabel: "Delete permanently",
-        onConfirm: () => {
-          setUsers((us) => us.filter((u) => !selectedIds.includes(u.id)));
-          logAudit("bulk-deleted", `${targets.length} users`);
-          pushToast(`Deleted ${targets.length} users`, "error");
-          setSelectedIds([]);
-          setConfirm(null);
-        },
-      });
-      return;
-    }
-    if (action === "activate") {
-      setUsers((us) =>
-        us.map((u) =>
-          selectedIds.includes(u.id) ? { ...u, status: "Active" } : u,
-        ),
-      );
-      logAudit("bulk-activated", `${targets.length} users`);
-      pushToast(`Activated ${targets.length} users`);
-    }
-    if (action === "suspend") {
-      setUsers((us) =>
-        us.map((u) =>
-          selectedIds.includes(u.id) ? { ...u, status: "Suspended" } : u,
-        ),
-      );
-      logAudit("bulk-suspended", `${targets.length} users`);
-      pushToast(`Suspended ${targets.length} users`, "error");
-    }
-    if (action === "export") {
-      downloadCSV(targets);
-      pushToast(`Exported ${targets.length} users to CSV`, "info");
-    }
-    setSelectedIds([]);
-  };
-
-  const saveUser = (data) => {
-    if (data.id) {
-      setUserField(data.id, data);
-      logAudit("edited", data.name);
-      pushToast(`${data.name} updated`);
-    } else {
-      const newUser = {
-        ...data,
-        id: Math.max(0, ...users.map((u) => u.id)) + 1,
-        status: "Active",
-        verification: "Pending",
-        joinedDate: new Date().toISOString().slice(0, 10),
-        lastActive: new Date().toISOString(),
-        metric: 0,
-        metricLabel:
-          data.role === "Delivery Person"
-            ? "deliveries"
-            : data.role === "Volunteer"
-              ? "shifts completed"
-              : data.role === "Recipient"
-                ? "pickups received"
-                : "meals donated",
-        location: {
-          lat: 37.7749 + (Math.random() - 0.5) * 0.06,
-          lng: -122.4194 + (Math.random() - 0.5) * 0.06,
-          name: data.locationName || "San Francisco, CA",
-        },
-      };
-      setUsers((us) => [newUser, ...us]);
-      logAudit("added", newUser.name);
-      pushToast(`${newUser.name} added to directory`);
-    }
-    setEditingUser(null);
-  };
-
-  const sortToggle = (key) => {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
-  };
-
-  /* ---------- render ---------- */
 
   const NavItem = ({ id, icon: Icon, label, badge }) => (
     <button
@@ -880,9 +834,6 @@ export default function GleanOpsAdmin() {
       {/* ---------------- Sidebar ---------------- */}
       <aside className="hidden md:flex w-60 flex-shrink-0 flex-col bg-[#0F172A] px-4 py-6 gap-6">
         <div className="flex items-center gap-2.5 px-2">
-          <div className="w-8 h-8 rounded-lg bg-[#146C5B] flex items-center justify-center">
-            <Package size={16} className="text-white" />
-          </div>
           <div>
             <div className="text-white font-semibold text-sm leading-tight">
               GleanOps
@@ -915,7 +866,7 @@ export default function GleanOpsAdmin() {
         </div>
       </aside>
 
-      {/* ---------------- Main ---------------- */}
+      {/* ---------------- Main Area ---------------- */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-[#E4E7EC] px-5 sm:px-8 py-3.5 flex items-center justify-between gap-4">
@@ -935,7 +886,7 @@ export default function GleanOpsAdmin() {
               {tab === "overview" &&
                 "Platform health across donators, recipients, volunteers, and drivers."}
               {tab === "directory" &&
-                "Manage access, verification, and roles for every account."}
+                "Manage profiles, verify accounts, and update permissions."}
               {tab === "map" &&
                 "Real-time positions of every active account in your service area."}
               {tab === "activity" &&
@@ -943,854 +894,310 @@ export default function GleanOpsAdmin() {
               {tab === "settings" && "Console preferences."}
             </p>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <button
-              onClick={() => setEditingUser({})}
-              className="bg-[#146C5B] hover:bg-[#0F5647] text-white text-sm font-medium px-4 py-2 rounded-full transition-all shadow-sm active:scale-95 flex items-center gap-1.5"
-            >
-              <Plus size={15} />{" "}
-              <span className="hidden sm:inline">Add user</span>
-            </button>
-            <div className="w-9 h-9 rounded-full bg-[#146C5B] text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
-              AD
-            </div>
-          </div>
         </header>
 
-        <main className="flex-1 px-5 sm:px-8 py-6 max-w-7xl w-full mx-auto">
-          {/* -------- Overview -------- */}
-          {tab === "overview" && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard
-                  icon={UsersIcon}
-                  label="Total users"
-                  value={stats.total}
-                  tint="#146C5B"
-                />
-                <StatCard
-                  icon={TrendingUp}
-                  label="Active"
-                  value={stats.active}
-                  tint="#1F8A57"
-                />
-                <StatCard
-                  icon={ShieldQuestion}
-                  label="Pending verification"
-                  value={stats.pending}
-                  tint="#B4531F"
-                />
-                <StatCard
-                  icon={AlertTriangle}
-                  label="Suspended"
-                  value={stats.suspended}
-                  tint="#C0392B"
-                />
-              </div>
-
-              <div className="grid lg:grid-cols-5 gap-4">
-                <div className="lg:col-span-2 bg-white rounded-2xl border border-[#E4E7EC] p-5">
-                  <h3 className="text-sm font-semibold text-[#101828] mb-4">
-                    Users by role
-                  </h3>
-                  <div className="space-y-3">
-                    {stats.byRole.map(({ role, count }) => (
-                      <div key={role} className="flex items-center gap-3">
-                        <div className="w-28 text-xs text-[#475467] flex-shrink-0">
-                          {role}
-                        </div>
-                        <div className="flex-1 h-2.5 rounded-full bg-[#F1F2F4] overflow-hidden">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${(count / stats.total) * 100}%`,
-                              background: ROLE_META[role].color,
-                            }}
-                          />
-                        </div>
-                        <div className="w-6 text-xs font-semibold text-[#101828] text-right">
-                          {count}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="lg:col-span-3 bg-white rounded-2xl border border-[#E4E7EC] p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-semibold text-[#101828]">
-                      Service area
-                    </h3>
-                    <button
-                      onClick={() => setTab("map")}
-                      className="text-xs font-medium text-[#146C5B] hover:underline"
-                    >
-                      Open full map →
-                    </button>
-                  </div>
-                  <MapView users={users} height={240} />
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl border border-[#E4E7EC] p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-[#101828]">
-                    Recent activity
-                  </h3>
-                  <button
-                    onClick={() => setTab("activity")}
-                    className="text-xs font-medium text-[#146C5B] hover:underline"
-                  >
-                    View all →
-                  </button>
-                </div>
-                <div className="divide-y divide-[#F1F2F4]">
-                  {audit.slice(0, 4).map((a) => (
-                    <AuditRow key={a.id} a={a} />
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* -------- Directory -------- */}
+        {/* Content body */}
+        <main className="flex-1 p-5 sm:p-8 max-w-7xl w-full mx-auto">
+          {/* DIRECTORY TAB */}
           {tab === "directory" && (
-            <div className="space-y-4">
-              {/* Controls */}
-              <div className="bg-white p-4 rounded-2xl border border-[#E4E7EC] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-                <div className="w-full lg:w-72 relative">
-                  <Search
-                    size={15}
-                    className="absolute inset-y-0 left-3 my-auto text-[#98A2B3]"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Search name, email, or phone…"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-[#F7F8FA] border border-transparent focus:border-[#146C5B] focus:bg-white rounded-xl text-sm outline-none transition-all"
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {["All", ...ROLES].map((r) => (
-                    <FilterPill
-                      key={r}
-                      active={roleFilter === r}
-                      onClick={() => setRoleFilter(r)}
-                      label={r}
-                    />
-                  ))}
-                  <span className="w-px h-5 bg-[#E4E7EC] mx-1 hidden sm:block" />
-                  {["All", ...STATUSES].map((s) => (
-                    <FilterPill
-                      key={s}
-                      active={statusFilter === s}
-                      onClick={() => setStatusFilter(s)}
-                      label={s}
-                    />
-                  ))}
-                  <span className="w-px h-5 bg-[#E4E7EC] mx-1 hidden sm:block" />
-                  {["All", ...VERIFICATIONS].map((v) => (
-                    <FilterPill
-                      key={v}
-                      active={verifyFilter === v}
-                      onClick={() => setVerifyFilter(v)}
-                      label={v}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Bulk action bar */}
-              {selectedIds.length > 0 && (
-                <div className="bg-[#101828] text-white rounded-2xl px-5 py-3 flex items-center justify-between">
-                  <span className="text-sm">{selectedIds.length} selected</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => bulkAction("activate")}
-                      className="text-xs font-medium px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-                    >
-                      Activate
-                    </button>
-                    <button
-                      onClick={() => bulkAction("suspend")}
-                      className="text-xs font-medium px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-                    >
-                      Suspend
-                    </button>
-                    <button
-                      onClick={() => bulkAction("export")}
-                      className="text-xs font-medium px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 transition-colors flex items-center gap-1"
-                    >
-                      <Download size={12} />
-                      Export
-                    </button>
-                    <button
-                      onClick={() => bulkAction("delete")}
-                      className="text-xs font-medium px-3 py-1.5 rounded-full bg-[#C0392B] hover:bg-[#A6301F] transition-colors flex items-center gap-1"
-                    >
-                      <Trash2 size={12} />
-                      Delete
-                    </button>
-                    <button
-                      onClick={() => setSelectedIds([])}
-                      className="text-xs text-[#9AA4B2] hover:text-white ml-1"
-                    >
-                      Clear
-                    </button>
-                  </div>
+            <div className="space-y-6">
+              {loadingUsers && (
+                <div className="bg-white rounded-2xl border border-[#E4E7EC] p-6 text-center">
+                  <div className="text-sm text-[#667085]">Loading users...</div>
                 </div>
               )}
 
-              {/* Table */}
-              <div className="bg-white rounded-2xl border border-[#E4E7EC] overflow-visible">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-[#F1F2F4] text-[11px] font-semibold text-[#98A2B3] uppercase tracking-wider bg-[#FAFAFB]">
-                        <th className="py-3 pl-6 pr-2 w-8">
-                          <input
-                            type="checkbox"
-                            checked={
-                              pagedUsers.length > 0 &&
-                              pagedUsers.every((u) =>
-                                selectedIds.includes(u.id),
-                              )
-                            }
-                            onChange={toggleSelectAllOnPage}
-                            className="rounded border-[#D0D5DD]"
-                          />
-                        </th>
-                        <SortableTh
-                          label="User"
-                          k="name"
-                          sortKey={sortKey}
-                          sortDir={sortDir}
-                          onClick={sortToggle}
-                        />
-                        <th className="py-3 px-3">Role</th>
-                        <th className="py-3 px-3">Status</th>
-                        <th className="py-3 px-3">Verification</th>
-                        <th className="py-3 px-3">Location</th>
-                        <SortableTh
-                          label="Joined"
-                          k="joinedDate"
-                          sortKey={sortKey}
-                          sortDir={sortDir}
-                          onClick={sortToggle}
-                        />
-                        <SortableTh
-                          label="Last active"
-                          k="lastActive"
-                          sortKey={sortKey}
-                          sortDir={sortDir}
-                          onClick={sortToggle}
-                        />
-                        <th className="py-3 px-3 text-right pr-6">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#F1F2F4] text-sm">
-                      {pagedUsers.length > 0 ? (
-                        pagedUsers.map((user) => (
+              {usersError && !loadingUsers && (
+                <div className="bg-[#FCEAE8] border border-[#F3D6D2] rounded-2xl p-4 flex items-center justify-between">
+                  <div className="text-sm text-[#C0392B]">{usersError}</div>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="text-xs font-medium text-[#C0392B] hover:underline"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {!loadingUsers && !usersError && (
+                <div className="bg-white rounded-2xl border border-[#E4E7EC] p-4 sm:p-6 shadow-sm">
+                  <div className="flex flex-col sm:flex-row gap-4 justify-between items-center mb-6">
+                    <div className="relative w-full sm:w-72">
+                      <Search
+                        className="absolute left-3.5 top-2.5 text-[#98A2B3]"
+                        size={16}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Search users..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 text-sm border border-[#E4E7EC] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#146C5B]/20 focus:border-[#146C5B]"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-[#E4E7EC] text-xs font-semibold text-[#667085]">
+                          <th className="py-3 px-4">User</th>
+                          <th className="py-3 px-4">Role</th>
+                          <th className="py-3 px-4">Status</th>
+                          <th className="py-3 px-4">Verification</th>
+                          <th className="py-3 px-4">Location</th>
+                          <th className="py-3 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E4E7EC] text-sm">
+                        {pagedUsers.map((u) => (
                           <tr
-                            key={user.id}
-                            className="hover:bg-[#FAFAFB] transition-colors"
+                            key={u.id}
+                            className="hover:bg-[#F7F8FA] transition-colors"
                           >
-                            <td className="py-3.5 pl-6 pr-2">
-                              <input
-                                type="checkbox"
-                                checked={selectedIds.includes(user.id)}
-                                onChange={() => toggleSelect(user.id)}
-                                className="rounded border-[#D0D5DD]"
-                              />
-                            </td>
-                            <td className="py-3.5 px-3">
-                              <button
-                                onClick={() => setDrawerUser(user)}
-                                className="flex items-center gap-3 text-left"
-                              >
-                                <Avatar user={user} />
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-3">
+                                <Avatar user={u} size={36} />
                                 <div>
                                   <div className="font-medium text-[#101828]">
-                                    {user.name}
+                                    {u.name}
                                   </div>
-                                  <div className="text-xs text-[#98A2B3]">
-                                    {user.email}
+                                  <div className="text-xs text-[#667085]">
+                                    {u.email}
                                   </div>
                                 </div>
-                              </button>
+                              </div>
                             </td>
-                            <td className="py-3.5 px-3">
-                              <RoleBadge role={user.role} />
+                            <td className="py-3 px-4">
+                              <RoleBadge role={u.role} />
                             </td>
-                            <td className="py-3.5 px-3">
-                              <StatusPill status={user.status} />
+                            <td className="py-3 px-4">
+                              <StatusPill status={u.status} />
                             </td>
-                            <td className="py-3.5 px-3">
-                              <VerifyBadge verification={user.verification} />
+                            <td className="py-3 px-4">
+                              <VerifyBadge verification={u.verification} />
                             </td>
-                            <td className="py-3.5 px-3">
-                              <button
-                                onClick={() => setDrawerUser(user)}
-                                className="text-xs font-medium text-[#146C5B] hover:underline flex items-center gap-1"
-                              >
-                                <MapPin size={12} /> {user.location.name}
-                              </button>
+                            <td className="py-3 px-4 text-[#667085] text-xs">
+                              {u.location?.name || "N/A"}
                             </td>
-                            <td className="py-3.5 px-3 text-xs text-[#667085] font-mono">
-                              {fmtDate(user.joinedDate)}
-                            </td>
-                            <td className="py-3.5 px-3 text-xs text-[#667085] font-mono">
-                              {timeAgo(user.lastActive)}
-                            </td>
-                            <td className="py-3.5 px-3 pr-6 text-right relative">
+                            <td className="py-3 px-4 text-right relative">
                               <button
                                 onClick={() =>
                                   setOpenMenuId(
-                                    openMenuId === user.id ? null : user.id,
+                                    openMenuId === u.id ? null : u.id,
                                   )
                                 }
-                                className="p-1.5 rounded-lg hover:bg-[#F1F2F4] transition-colors"
+                                className="p-1.5 hover:bg-[#F1F2F4] rounded-lg transition-colors"
                               >
                                 <MoreVertical
-                                  size={15}
+                                  size={16}
                                   className="text-[#667085]"
                                 />
                               </button>
-                              {openMenuId === user.id && (
-                                <div className="absolute right-6 top-10 z-40 w-48 bg-white border border-[#E4E7EC] rounded-xl shadow-lg py-1.5 text-left">
-                                  <MenuItem
-                                    icon={Edit3}
-                                    label="Edit details"
-                                    onClick={() => {
-                                      setEditingUser(user);
-                                      setOpenMenuId(null);
-                                    }}
-                                  />
-                                  {user.verification !== "Verified" && (
-                                    <MenuItem
-                                      icon={ShieldCheck}
-                                      label="Mark verified"
-                                      onClick={() =>
-                                        requestVerify(user, "Verified")
-                                      }
-                                    />
-                                  )}
-                                  {user.verification !== "Rejected" && (
-                                    <MenuItem
-                                      icon={ShieldAlert}
-                                      label="Reject verification"
-                                      onClick={() =>
-                                        requestVerify(user, "Rejected")
-                                      }
-                                    />
-                                  )}
-                                  {user.status !== "Active" && (
-                                    <MenuItem
-                                      icon={CheckCircle2}
-                                      label="Activate"
-                                      onClick={() =>
-                                        requestStatusChange(user, "Active")
-                                      }
-                                    />
-                                  )}
-                                  {user.status === "Active" && (
-                                    <MenuItem
-                                      icon={XCircle}
-                                      label="Deactivate"
-                                      onClick={() =>
-                                        requestStatusChange(user, "Inactive")
-                                      }
-                                    />
-                                  )}
-                                  {user.status !== "Suspended" && (
-                                    <MenuItem
-                                      icon={AlertTriangle}
-                                      label="Suspend account"
-                                      onClick={() =>
-                                        requestStatusChange(user, "Suspended")
-                                      }
-                                      danger
-                                    />
-                                  )}
-                                  <div className="h-px bg-[#F1F2F4] my-1" />
-                                  <MenuItem
-                                    icon={Trash2}
-                                    label="Delete user"
-                                    onClick={() => requestDelete(user)}
-                                    danger
-                                  />
+                              {openMenuId === u.id && (
+                                <div className="absolute right-4 top-12 z-20 w-44 bg-white rounded-xl shadow-lg border border-[#E4E7EC] py-1 text-left">
+                                  <button
+                                    onClick={() =>
+                                      requestStatusChange(
+                                        u,
+                                        u.status === "Active"
+                                          ? "Suspended"
+                                          : "Active",
+                                      )
+                                    }
+                                    className="w-full px-4 py-2 text-xs text-[#344054] hover:bg-[#F7F8FA]"
+                                  >
+                                    {u.status === "Active"
+                                      ? "Suspend user"
+                                      : "Activate user"}
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      requestVerify(
+                                        u,
+                                        u.verification === "Verified"
+                                          ? "Rejected"
+                                          : "Verified",
+                                      )
+                                    }
+                                    className="w-full px-4 py-2 text-xs text-[#344054] hover:bg-[#F7F8FA]"
+                                  >
+                                    {u.verification === "Verified"
+                                      ? "Reject verification"
+                                      : "Verify user"}
+                                  </button>
+                                  <button
+                                    onClick={() => requestDelete(u)}
+                                    className="w-full px-4 py-2 text-xs text-[#C0392B] hover:bg-[#FCEAE8]"
+                                  >
+                                    Delete user
+                                  </button>
                                 </div>
                               )}
                             </td>
                           </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td
-                            colSpan="9"
-                            className="py-14 text-center text-[#98A2B3] text-sm"
-                          >
-                            No users match your filters.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        ))}
+                        {pagedUsers.length === 0 && (
+                          <tr>
+                            <td
+                              colSpan="6"
+                              className="py-8 text-center text-sm text-[#667085]"
+                            >
+                              No users found matching your search.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
 
-                {/* Pagination */}
-                <div className="flex items-center justify-between px-6 py-3.5 border-t border-[#F1F2F4]">
-                  <span className="text-xs text-[#667085]">
-                    Showing {pagedUsers.length ? (page - 1) * pageSize + 1 : 0}–
-                    {Math.min(page * pageSize, filteredUsers.length)} of{" "}
-                    {filteredUsers.length}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      disabled={page === 1}
-                      onClick={() => setPage((p) => p - 1)}
-                      className="p-1.5 rounded-lg border border-[#E4E7EC] disabled:opacity-40 hover:bg-[#F1F2F4] transition-colors"
-                    >
-                      <ChevronLeft size={14} />
-                    </button>
-                    <span className="text-xs text-[#475467] px-2">
-                      {page} / {totalPages}
-                    </span>
-                    <button
-                      disabled={page === totalPages}
-                      onClick={() => setPage((p) => p + 1)}
-                      className="p-1.5 rounded-lg border border-[#E4E7EC] disabled:opacity-40 hover:bg-[#F1F2F4] transition-colors"
-                    >
-                      <ChevronRight size={14} />
-                    </button>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#E4E7EC]">
+                      <span className="text-xs text-[#667085]">
+                        Page {page} of {totalPages}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          disabled={page === 1}
+                          onClick={() => setPage((p) => Math.max(1, p - 1))}
+                          className="px-3 py-1 text-xs border border-[#E4E7EC] rounded-lg disabled:opacity-50"
+                        >
+                          Previous
+                        </button>
+                        <button
+                          disabled={page === totalPages}
+                          onClick={() =>
+                            setPage((p) => Math.min(totalPages, p + 1))
+                          }
+                          className="px-3 py-1 text-xs border border-[#E4E7EC] rounded-lg disabled:opacity-50"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* OVERVIEW TAB */}
+          {tab === "overview" && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white p-5 rounded-2xl border border-[#E4E7EC]">
+                  <div className="text-xs font-semibold text-[#667085] uppercase tracking-wider">
+                    Total Users
+                  </div>
+                  <div className="text-2xl font-bold text-[#101828] mt-1">
+                    {stats.total}
                   </div>
                 </div>
+                <div className="bg-white p-5 rounded-2xl border border-[#E4E7EC]">
+                  <div className="text-xs font-semibold text-[#667085] uppercase tracking-wider">
+                    Active Users
+                  </div>
+                  <div className="text-2xl font-bold text-[#1F8A57] mt-1">
+                    {stats.active}
+                  </div>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-[#E4E7EC]">
+                  <div className="text-xs font-semibold text-[#667085] uppercase tracking-wider">
+                    Pending Verification
+                  </div>
+                  <div className="text-2xl font-bold text-[#B4531F] mt-1">
+                    {stats.pending}
+                  </div>
+                </div>
+                <div className="bg-white p-5 rounded-2xl border border-[#E4E7EC]">
+                  <div className="text-xs font-semibold text-[#667085] uppercase tracking-wider">
+                    Suspended
+                  </div>
+                  <div className="text-2xl font-bold text-[#C0392B] mt-1">
+                    {stats.suspended}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-[#E4E7EC] p-6">
+                <h3 className="text-base font-semibold text-[#101828] mb-4">
+                  Quick Map Preview
+                </h3>
+                <MapView users={users} height={320} />
               </div>
             </div>
           )}
 
-          {/* -------- Map -------- */}
+          {/* LIVE MAP TAB */}
           {tab === "map" && (
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {["All", ...ROLES].map((r) => (
-                  <FilterPill
-                    key={r}
-                    active={roleFilter === r}
-                    onClick={() => setRoleFilter(r)}
-                    label={r}
-                  />
-                ))}
+              <div className="bg-white rounded-2xl border border-[#E4E7EC] p-6">
+                <h3 className="text-base font-semibold text-[#101828] mb-2">
+                  Live Fleet & User Locations
+                </h3>
+                <p className="text-xs text-[#667085] mb-4">
+                  Click any marker to inspect user status and contact
+                  information.
+                </p>
+                <MapView users={users} height={540} />
               </div>
-              <MapView
-                users={
-                  roleFilter === "All"
-                    ? users
-                    : users.filter((u) => u.role === roleFilter)
-                }
-                height={520}
-                onMarkerClick={setDrawerUser}
-              />
-              <div className="flex flex-wrap gap-4">
-                {ROLES.map((r) => (
+            </div>
+          )}
+
+          {/* ACTIVITY LOG TAB */}
+          {tab === "activity" && (
+            <div className="bg-white rounded-2xl border border-[#E4E7EC] p-6">
+              <h3 className="text-base font-semibold text-[#101828] mb-4">
+                Admin Activity Log
+              </h3>
+              <div className="space-y-4">
+                {audit.map((item) => (
                   <div
-                    key={r}
-                    className="flex items-center gap-2 text-xs text-[#475467]"
+                    key={item.id}
+                    className="flex items-center justify-between py-3 border-b border-[#E4E7EC] text-sm"
                   >
-                    <span
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{ background: ROLE_META[r].color }}
-                    />
-                    {r}
+                    <div>
+                      <span className="font-medium text-[#101828]">
+                        {item.actor}
+                      </span>
+                      <span className="text-[#667085]"> {item.action} </span>
+                      <span className="font-medium text-[#101828]">
+                        {item.target}
+                      </span>
+                    </div>
+                    <div className="text-xs text-[#667085]">
+                      {timeAgo(item.time)}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* -------- Activity -------- */}
-          {tab === "activity" && (
-            <div className="bg-white rounded-2xl border border-[#E4E7EC] p-5">
-              <div className="divide-y divide-[#F1F2F4]">
-                {audit.map((a) => (
-                  <AuditRow key={a.id} a={a} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* -------- Settings -------- */}
+          {/* SETTINGS TAB */}
           {tab === "settings" && (
-            <div className="bg-white rounded-2xl border border-[#E4E7EC] p-8 text-center text-sm text-[#667085]">
-              Admin role permissions, notification rules, and API access will
-              live here.
+            <div className="bg-white rounded-2xl border border-[#E4E7EC] p-6 max-w-xl">
+              <h3 className="text-base font-semibold text-[#101828] mb-4">
+                Console Preferences
+              </h3>
+              <p className="text-sm text-[#667085]">
+                Console settings are currently locked to administrator defaults.
+              </p>
             </div>
           )}
         </main>
       </div>
 
-      {/* ---------------- Drawer: user detail ---------------- */}
-      {drawerUser && (
-        <div
-          className="fixed inset-0 z-[80] bg-black/30 backdrop-blur-sm flex justify-end"
-          onClick={() => setDrawerUser(null)}
-        >
-          <div
-            className="bg-white w-full max-w-md h-full overflow-y-auto shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-6 border-b border-[#F1F2F4] flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <Avatar user={drawerUser} size={48} />
-                <div>
-                  <div className="font-semibold text-[#101828]">
-                    {drawerUser.name}
-                  </div>
-                  <div className="text-xs text-[#98A2B3]">
-                    {drawerUser.role} · #
-                    {String(drawerUser.id).padStart(4, "0")}
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setDrawerUser(null)}
-                className="w-8 h-8 rounded-full bg-[#F1F2F4] flex items-center justify-center hover:bg-[#E4E7EC] transition-colors"
-              >
-                <X size={15} />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-5">
-              <div className="flex flex-wrap gap-2">
-                <StatusPill status={drawerUser.status} />
-                <VerifyBadge verification={drawerUser.verification} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="bg-[#F7F8FA] rounded-xl p-3">
-                  <div className="text-[10px] uppercase text-[#98A2B3] font-semibold mb-1">
-                    {drawerUser.metricLabel}
-                  </div>
-                  <div className="text-xl font-semibold text-[#101828]">
-                    {drawerUser.metric}
-                  </div>
-                </div>
-                <div className="bg-[#F7F8FA] rounded-xl p-3">
-                  <div className="text-[10px] uppercase text-[#98A2B3] font-semibold mb-1">
-                    Member since
-                  </div>
-                  <div className="text-sm font-semibold text-[#101828] pt-1.5">
-                    {fmtDate(drawerUser.joinedDate)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2 text-sm">
-                <div className="flex items-center gap-2 text-[#475467]">
-                  <Mail size={14} className="text-[#98A2B3]" />{" "}
-                  {drawerUser.email}
-                </div>
-                <div className="flex items-center gap-2 text-[#475467]">
-                  <Phone size={14} className="text-[#98A2B3]" />{" "}
-                  {drawerUser.phone}
-                </div>
-                <div className="flex items-center gap-2 text-[#475467]">
-                  <Clock size={14} className="text-[#98A2B3]" /> Active{" "}
-                  {timeAgo(drawerUser.lastActive)}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-xs font-semibold text-[#475467] mb-2 flex items-center gap-1.5">
-                  <MapPin size={13} /> Last known location
-                </div>
-                <MapView
-                  users={[drawerUser]}
-                  height={200}
-                  focusUser={drawerUser}
-                />
-                <div className="text-xs text-[#98A2B3] mt-1.5">
-                  {drawerUser.location.name}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={() => {
-                    setEditingUser(drawerUser);
-                    setDrawerUser(null);
-                  }}
-                  className="flex-1 text-xs font-medium border border-[#E4E7EC] text-[#344054] rounded-full py-2.5 hover:bg-[#F1F2F4] transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <Edit3 size={13} /> Edit
-                </button>
-                {drawerUser.status !== "Suspended" ? (
-                  <button
-                    onClick={() => requestStatusChange(drawerUser, "Suspended")}
-                    className="flex-1 text-xs font-medium border border-[#F3D6D2] text-[#C0392B] rounded-full py-2.5 hover:bg-[#FCEAE8] transition-colors"
-                  >
-                    Suspend
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => requestStatusChange(drawerUser, "Active")}
-                    className="flex-1 text-xs font-medium border border-[#CDE9DA] text-[#1F8A57] rounded-full py-2.5 hover:bg-[#E7F6EE] transition-colors"
-                  >
-                    Reactivate
-                  </button>
-                )}
-                <button
-                  onClick={() => requestDelete(drawerUser)}
-                  className="text-xs font-medium bg-[#C0392B] hover:bg-[#A6301F] text-white rounded-full py-2.5 px-4 transition-colors flex items-center gap-1.5"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ---------------- Add / Edit modal ---------------- */}
-      {editingUser !== null && (
-        <UserFormModal
-          initial={editingUser}
-          onCancel={() => setEditingUser(null)}
-          onSave={saveUser}
-        />
-      )}
-
+      <Toast toasts={toasts} />
       <ConfirmDialog
         open={!!confirm}
         title={confirm?.title}
         body={confirm?.body}
-        danger={confirm?.danger}
         confirmLabel={confirm?.confirmLabel}
+        danger={confirm?.danger}
         onConfirm={confirm?.onConfirm}
         onCancel={() => setConfirm(null)}
       />
-
-      <Toast toasts={toasts} />
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* More small components                                                */
-/* ------------------------------------------------------------------ */
-
-function StatCard({ icon: Icon, label, value, tint }) {
-  return (
-    <div className="bg-white rounded-2xl border border-[#E4E7EC] p-4 flex items-center gap-3.5">
-      <div
-        className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-        style={{ background: `${tint}1A` }}
-      >
-        <Icon size={18} style={{ color: tint }} />
-      </div>
-      <div>
-        <div className="text-xl font-semibold text-[#101828] leading-tight">
-          {value}
-        </div>
-        <div className="text-xs text-[#667085]">{label}</div>
-      </div>
-    </div>
-  );
-}
-
-function FilterPill({ active, onClick, label }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all whitespace-nowrap ${
-        active
-          ? "bg-[#101828] text-white shadow-sm"
-          : "bg-[#F7F8FA] text-[#475467] hover:bg-[#EDEEF1]"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-function SortableTh({ label, k, sortKey, sortDir, onClick }) {
-  const active = sortKey === k;
-  return (
-    <th className="py-3 px-3">
-      <button
-        onClick={() => onClick(k)}
-        className={`flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider ${active ? "text-[#101828]" : "text-[#98A2B3]"}`}
-      >
-        {label}{" "}
-        <ArrowUpDown
-          size={11}
-          className={
-            active ? (sortDir === "asc" ? "" : "rotate-180") : "opacity-40"
-          }
-        />
-      </button>
-    </th>
-  );
-}
-
-function MenuItem({ icon: Icon, label, onClick, danger }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-medium hover:bg-[#F7F8FA] transition-colors ${danger ? "text-[#C0392B]" : "text-[#344054]"}`}
-    >
-      <Icon size={14} /> {label}
-    </button>
-  );
-}
-
-function AuditRow({ a }) {
-  const verbColor =
-    {
-      verified: "#1F8A57",
-      activated: "#1F8A57",
-      added: "#146C5B",
-      suspended: "#C0392B",
-      rejected: "#C0392B",
-      deleted: "#C0392B",
-      "bulk-deleted": "#C0392B",
-      "bulk-suspended": "#C0392B",
-      deactivated: "#667085",
-      edited: "#2B6CB0",
-      "bulk-activated": "#1F8A57",
-    }[a.action] || "#667085";
-  return (
-    <div className="flex items-center gap-3 py-3">
-      <div
-        className="w-2 h-2 rounded-full flex-shrink-0"
-        style={{ background: verbColor }}
-      />
-      <div className="flex-1 text-sm text-[#344054]">
-        <span className="font-medium text-[#101828]">{a.actor}</span>{" "}
-        {a.action.replace("-", " ")}{" "}
-        <span className="font-medium text-[#101828]">{a.target}</span>
-      </div>
-      <div className="text-xs text-[#98A2B3] font-mono flex-shrink-0">
-        {timeAgo(a.time)}
-      </div>
-    </div>
-  );
-}
-
-function UserFormModal({ initial, onCancel, onSave }) {
-  const isEdit = !!initial.id;
-  const [form, setForm] = useState({
-    id: initial.id,
-    name: initial.name || "",
-    email: initial.email || "",
-    phone: initial.phone || "",
-    role: initial.role || "Donator",
-    locationName: initial.location?.name || "San Francisco, CA",
-    status: initial.status,
-    verification: initial.verification,
-  });
-
-  const submit = (e) => {
-    e.preventDefault();
-    if (!form.name || !form.email) return;
-    onSave(isEdit ? { ...initial, ...form } : form);
-  };
-
-  return (
-    <div className="fixed inset-0 z-[85] bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden">
-        <div className="p-6 border-b border-[#F1F2F4] flex justify-between items-center">
-          <h3 className="text-base font-semibold text-[#101828]">
-            {isEdit ? "Edit user" : "Add new platform user"}
-          </h3>
-          <button
-            onClick={onCancel}
-            className="w-8 h-8 rounded-full bg-[#F1F2F4] flex items-center justify-center hover:bg-[#E4E7EC] transition-colors"
-          >
-            <X size={15} />
-          </button>
-        </div>
-        <form onSubmit={submit} className="p-6 space-y-4">
-          <Field label="Full name">
-            <input
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g. Alex Mercer"
-              className="input"
-            />
-          </Field>
-          <Field label="Email address">
-            <input
-              required
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              placeholder="alex.m@example.com"
-              className="input"
-            />
-          </Field>
-          <Field label="Phone">
-            <input
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-              placeholder="(415) 555-0100"
-              className="input"
-            />
-          </Field>
-          <Field label="System role">
-            <select
-              value={form.role}
-              onChange={(e) => setForm({ ...form, role: e.target.value })}
-              className="input"
-            >
-              {ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Base location">
-            <input
-              value={form.locationName}
-              onChange={(e) =>
-                setForm({ ...form, locationName: e.target.value })
-              }
-              placeholder="e.g. Downtown, SF"
-              className="input"
-            />
-          </Field>
-          <style>{`.input{width:100%;padding:.5rem .75rem;background:#F7F8FA;border:1px solid transparent;border-radius:.75rem;font-size:.875rem;outline:none;transition:.15s}.input:focus{border-color:#146C5B;background:#fff}`}</style>
-          <div className="pt-3 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-4 py-2 text-xs font-medium text-[#475467] hover:bg-[#F1F2F4] rounded-full transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="bg-[#146C5B] hover:bg-[#0F5647] text-white text-xs font-medium px-5 py-2 rounded-full transition-all shadow-sm active:scale-95"
-            >
-              {isEdit ? "Save changes" : "Save user"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, children }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-[#475467] mb-1">
-        {label}
-      </label>
-      {children}
     </div>
   );
 }

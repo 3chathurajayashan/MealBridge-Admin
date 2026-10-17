@@ -4,6 +4,9 @@ import SignIn from "./Pages/SignIn";
 import AdminHome from "./Components/AdminComponent/AdminHome";
 import AdminAnimation from "./Components/AdminComponent/AdminAnimation";
 import UserManagement from "./Components/AdminComponent/AdComponents/UserManagement";
+import UserProfile from "./Components/AdminComponent/AdComponents/UserProfile";
+import AllDelivers from "./Components/DeliverManagement/AllDelivers";
+import AssignDelivery from "./Components/DeliverManagement/AssignDelivery";
 
 function App() {
   return (
@@ -17,6 +20,9 @@ function App() {
       <Route path="/admin/dashboard" element={<AdminHome />}></Route>
       <Route path="/admin/create" element={<AdminAnimation />}></Route>
       <Route path="/admin/user" element={<UserManagement />}></Route>
+      <Route path="/admin/profile" element={<UserProfile />}></Route>
+      <Route path="/admin/donations" element={<AllDelivers />}></Route>
+      <Route path="/admin/delivers" element={<AssignDelivery />}></Route>
     </Routes>
   );
 }

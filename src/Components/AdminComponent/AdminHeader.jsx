@@ -13,6 +13,7 @@ import {
   Moon,
   Activity,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const currentUser = {
   id: "6a9294b1be46d08193cd8e5e",
@@ -244,13 +245,12 @@ export function AdminHeader() {
               </div>
 
               <div className="py-1">
-                <a
-                  href="#profile"
+                <Link
+                  to="/admin/profile"
                   className="flex items-center gap-2.5 px-4 py-2 text-[13px] text-[#424245] hover:bg-[#F5F5F7] hover:text-[#1D1D1F] transition-colors"
                 >
-                  <User className="w-4 h-4 text-[#86868B]" />
-                  <span>Your Profile</span>
-                </a>
+                  Profile
+                </Link>
                 <a
                   href="#security"
                   className="flex items-center gap-2.5 px-4 py-2 text-[13px] text-[#424245] hover:bg-[#F5F5F7] hover:text-[#1D1D1F] transition-colors"

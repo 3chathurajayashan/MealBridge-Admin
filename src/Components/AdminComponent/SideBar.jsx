@@ -46,9 +46,14 @@ import { MessageSquare, AlertTriangle, Star, ShieldAlert } from "lucide-react";
 const navItems = [
   { name: "Dashboard", href: "#dashboard", icon: LayoutDashboard },
   { name: "User Management", href: "/admin/user", icon: Users },
-  { name: "Delivery Management", href: "#deliveries", icon: Truck },
+  { name: "Delivery Management", href: "/admin/delivers", icon: Truck },
   { name: "Location Configs", href: "#locations", icon: MapPin },
-  { name: "Donor Requests", href: "#donors", icon: HeartHandshake, badge: 3 },
+  {
+    name: "Donor Requests",
+    href: "/admin/donations",
+    icon: HeartHandshake,
+    badge: 3,
+  },
   {
     name: "Recipient Requests",
     href: "#recipients",
