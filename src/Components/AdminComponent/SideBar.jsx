@@ -56,7 +56,7 @@ const navItems = [
   },
   {
     name: "Recipient Requests",
-    href: "#recipients",
+    href: "/admin/requests",
     icon: UserCheck,
     badge: 5,
   },

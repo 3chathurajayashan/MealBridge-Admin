@@ -7,6 +7,7 @@ import UserManagement from "./Components/AdminComponent/AdComponents/UserManagem
 import UserProfile from "./Components/AdminComponent/AdComponents/UserProfile";
 import AllDelivers from "./Components/DeliverManagement/AllDelivers";
 import AssignDelivery from "./Components/DeliverManagement/AssignDelivery";
+import Receipients from "./Components/RecipientCmponent/Receipients";
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
       <Route path="/admin/profile" element={<UserProfile />}></Route>
       <Route path="/admin/donations" element={<AllDelivers />}></Route>
       <Route path="/admin/delivers" element={<AssignDelivery />}></Route>
+      <Route path="/admin/requests" element={<Receipients />}></Route>
     </Routes>
   );
 }
